@@ -243,8 +243,11 @@ class SimultaneousMultiscaleTrainer(object):
 
         # Load more params
         self.start_epoch = data['epoch']
+        # update progress, otherwise we always restart training from first defined scale
+        self.progress = self.start_epoch / self.opt.train.epochs
         self.lr = data['lr']
-
+        # update learning rate to take into account current epoch/progress
+        self.update_learning_rate()
         info('loaded optimizer state from ' + save_path)
 
     def set_learning_rate(self, lr, optimizer):

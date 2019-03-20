@@ -4,13 +4,14 @@ from ..utils import print_network, tensor2im
 from .generators import ProSR
 from bisect import bisect_left
 from collections import OrderedDict
+import apex
 from apex import amp
 
 import os
 import torch
 import numpy as np
 
-amp_handle = amp.init(enabled=True, opt_level='02', keep_batchnorm_fp32=True)
+amp_handle = amp.init(enabled=True)
 
 class SimultaneousMultiscaleTrainer(object):
     """multiscale training without curriculum scheduling"""
@@ -54,12 +55,17 @@ class SimultaneousMultiscaleTrainer(object):
         if torch.cuda.device_count() > 1:
             self.net_G = torch.nn.DataParallel(self.net_G)
 
-        self.optimizer_G = torch.optim.Adam(
+        # self.optimizer_G = apex.optimizers.FusedAdam(
+        #         [p for p in self.net_G.parameters() if p.requires_grad],
+        #         lr=self.opt.train.lr,
+        #         betas=(0.9, 0.999),
+        #         eps=1.0e-08)
+        
+        self.lr = self.opt.train.lrself.optimizer_G = torch.optim.Adam(
             [p for p in self.net_G.parameters() if p.requires_grad],
             lr=self.opt.train.lr,
             betas=(0.9, 0.999),
             eps=1.0e-08)
-        self.lr = self.opt.train.lr
 
         if resume_from:
             try:
@@ -77,6 +83,9 @@ class SimultaneousMultiscaleTrainer(object):
         # print('---------- Networks initialized -------------')
         # print_network(self.net_G)
         # print('-----------------------------------------------')
+
+        # convert to apex
+        self.net_G, self.optimizer_G = amp.initialize(self.net_G, self.optimizer_G, opt_level="O2", keep_batchnorm_fp32=True)
 
     def name(self):
         return 'SimultaneousMultiscaleTrainer'
@@ -129,7 +138,7 @@ class SimultaneousMultiscaleTrainer(object):
 
     def backward(self):
         self.compute_loss()
-        with amp_handle.scale_loss(self.loss, self.optimizer_G) as scaled_loss:
+        with amp.scale_loss(self.loss, self.optimizer_G) as scaled_loss:
             scaled_loss.backward()
         #self.loss.backward()
 

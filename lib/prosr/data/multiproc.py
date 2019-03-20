@@ -1,7 +1,7 @@
 import torch
 import torch.multiprocessing as multiprocessing
 from torch.utils.data.dataloader import (_DataLoaderIter, DataLoader,
-    _worker_manager_loop, _set_SIGCHLD_handler, ExceptionWrapper,
+    _pin_memory_loop, _set_SIGCHLD_handler, ExceptionWrapper,
     pin_memory_batch)
 from torch._C import (_set_worker_signal_handlers, _update_worker_pids,
     _remove_worker_pids, _error_if_any_worker_fails)
@@ -100,7 +100,7 @@ class MyDataLoaderIter(_DataLoaderIter):
                     # do not initialize cuda context if not necessary
                     maybe_device_id = None
                 self.worker_manager_thread = threading.Thread(
-                    target=_worker_manager_loop,
+                    target=_pin_memory_loop,
                     args=(self.worker_result_queue, self.data_queue, self.done_event, self.pin_memory,
                           maybe_device_id))
                 self.worker_manager_thread.daemon = True

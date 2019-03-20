@@ -4,10 +4,13 @@ from ..utils import print_network, tensor2im
 from .generators import ProSR
 from bisect import bisect_left
 from collections import OrderedDict
+from apex import amp
 
 import os
 import torch
 import numpy as np
+
+amp_handle = amp.init(enabled=True, opt_level='02', keep_batchnorm_fp32=True)
 
 class SimultaneousMultiscaleTrainer(object):
     """multiscale training without curriculum scheduling"""
@@ -63,6 +66,7 @@ class SimultaneousMultiscaleTrainer(object):
                 self.load_network(self.net_G, 'G', resume_from)
                 self.load_optimizer(self.optimizer_G, 'G', resume_from)
                 info('Set lr = %e' % self.lr)
+                self.progress = self.start_epoch / self.opt.train.epochs
             except Exception as e:
                 warn("Error loading pretrained network. " + str(e))
                 exit(0)
@@ -125,7 +129,9 @@ class SimultaneousMultiscaleTrainer(object):
 
     def backward(self):
         self.compute_loss()
-        self.loss.backward()
+        with amp_handle.scale_loss(self.loss, self.optimizer_G) as scaled_loss:
+            scaled_loss.backward()
+        #self.loss.backward()
 
     def compute_loss(self):
         self.loss = 0
@@ -243,10 +249,8 @@ class SimultaneousMultiscaleTrainer(object):
 
         # Load more params
         self.start_epoch = data['epoch']
-        # update progress, otherwise we always restart training from first defined scale
         self.progress = self.start_epoch / self.opt.train.epochs
         self.lr = data['lr']
-        # update learning rate to take into account current epoch/progress
         self.update_learning_rate()
         info('loaded optimizer state from ' + save_path)
 
